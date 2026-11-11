@@ -44,6 +44,7 @@ bool Arm::calibrate(float q0_rad, float q1_rad) {
   reference_.ddq[0] = reference_.ddq[1] = 0.f;
 
   calibrated_ = true;
+  resetDerivativeState();
   return true;
 }
 
@@ -68,6 +69,7 @@ bool Arm::enable() {
   mode_ = Mode::Joint;
   trajectory_type_ = TrajectoryType::None;
   trajectory_finished_ = false;
+  resetDerivativeState();
   return true;
 }
 
@@ -89,14 +91,10 @@ bool Arm::setReference(const Reference& reference) {
 
 bool Arm::applyReference(const Reference& reference) {
   if (!withinLimits(reference.q)) return false;
-
-  const float ff0 = reference.ddq[0] * feedforward_.k_acc[0];
-  const float ff1 = reference.ddq[1] * feedforward_.k_acc[1];
-
   joint0_.setAngleSpeed(reference.q[0] * kRadToDeg,
-                        reference.dq[0] * kRadToDeg, ff0);
+                        reference.dq[0] * kRadToDeg, 0.f);
   joint1_.setAngleSpeed(reference.q[1] * kRadToDeg,
-                        reference.dq[1] * kRadToDeg, ff1);
+                        reference.dq[1] * kRadToDeg, 0.f);
   return true;
 }
 
@@ -164,6 +162,7 @@ bool Arm::trajStart(float x_m, float y_m, float duration_s) {
   trajectory_type_ = TrajectoryType::Cartesian;
   trajectory_start_tick_ = HAL_GetTick();
   trajectory_finished_ = false;
+  resetDerivativeState();
   return true;
 }
 
@@ -183,6 +182,7 @@ bool Arm::trajStartJoint(float q0_rad, float q1_rad, float duration_s) {
     trajectory_type_ = TrajectoryType::Joint;
     trajectory_start_tick_ = HAL_GetTick();
     trajectory_finished_ = false;
+    resetDerivativeState();
     return true;
 }
 
@@ -192,6 +192,7 @@ void Arm::trajAbort() {
     trajectory_finished_ = false;
     reference_.dq[0] = reference_.dq[1] = 0.f;
     reference_.ddq[0] = reference_.ddq[1] = 0.f;
+    resetDerivativeState();
 }
 
 void Arm::trajectoryPlanner() {
@@ -208,10 +209,21 @@ void Arm::trajectoryPlanner() {
 
       float dq[2] = {0.f, 0.f};
       float ddq[2] = {0.f, 0.f};
-      if (!ArmKinematics::derivatives(p, q, dq, ddq)) {
-        dq[0] = dq[1] = 0.f;
-        ddq[0] = ddq[1] = 0.f;
+
+      if (diff_valid_) {
+        const uint32_t now = HAL_GetTick();
+        const float dt = static_cast<float>(now - diff_last_tick_) * 0.001f;
+        ArmKinematics::derivatives(p, q, diff_q_prev_, diff_dq_prev_, dt, dq, ddq);
+        diff_last_tick_ = now;
+      } else {
+        diff_valid_ = true;
+        diff_last_tick_ = HAL_GetTick();
       }
+
+      diff_q_prev_[0] = q[0];
+      diff_q_prev_[1] = q[1];
+      diff_dq_prev_[0] = dq[0];
+      diff_dq_prev_[1] = dq[1];
 
       reference_.q[0] = q[0];
       reference_.q[1] = q[1];
@@ -288,4 +300,11 @@ void Arm::writeMotorCommands() {
     return;
   }
   applyReference(reference_);
+}
+
+void Arm::resetDerivativeState() {
+  diff_q_prev_[0] = diff_q_prev_[1] = 0.f;
+  diff_dq_prev_[0] = diff_dq_prev_[1] = 0.f;
+  diff_last_tick_ = 0;
+  diff_valid_ = false;
 }

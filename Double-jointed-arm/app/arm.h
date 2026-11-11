@@ -71,6 +71,7 @@ class Arm {
   void updateFeedback();
   void trajectoryPlanner();
   void writeMotorCommands();
+  void resetDerivativeState();
 
   Motor& joint0_;
   Motor& joint1_;
@@ -88,6 +89,10 @@ class Arm {
   float joint_trajectory_start_[2]{};
   float joint_trajectory_end_[2]{};
   float joint_trajectory_duration_{};
+  float diff_q_prev_[2] = {0.f, 0.f};
+  float diff_dq_prev_[2] = {0.f, 0.f};
+  uint32_t diff_last_tick_ = 0;
+  bool diff_valid_ = false;
 };
 
 #endif  // DOUBLE_JOINTED_ROBOTIC_ARM_ARM_H

@@ -56,24 +56,21 @@ bool ArmKinematics::lineReachable(const CartesianReference& start,
 }
 
 bool ArmKinematics::derivatives(const CartesianReference& point, const float q[2],
-                               float dq[2], float ddq[2]) {
-  const float s0 = sinf(q[0]);
-  const float c0 = cosf(q[0]);
-  const float s01 = sinf(q[0] + q[1]);
-  const float c01 = cosf(q[0] + q[1]);
+                                const float q_prev[2], const float dq_prev[2],
+                                float dt, float dq[2], float ddq[2]) {
+  (void)point;
 
-  const float J11 = -l0 * s0 - l1 * s01;
-  const float J12 = -l1 * s01;
-  const float J21 = l0 * c0 + l1 * c01;
-  const float J22 = l1 * c01;
+  if (dt < 1e-4f) {
+    dq[0] = dq[1] = 0.f;
+    ddq[0] = ddq[1] = 0.f;
+    return true;
+  }
 
-  const float det = J11 * J22 - J12 * J21;
-  if (fabsf(det) < 1e-6f) return false;
+  dq[0] = (q[0] - q_prev[0]) / dt;
+  dq[1] = (q[1] - q_prev[1]) / dt;
 
-  dq[0] = (J22 * point.dx - J12 * point.dy) / det;
-  dq[1] = (-J21 * point.dx + J11 * point.dy) / det;
+  ddq[0] = (dq[0] - dq_prev[0]) / dt;
+  ddq[1] = (dq[1] - dq_prev[1]) / dt;
 
-  ddq[0] = (J22 * point.ddx - J12 * point.ddy) / det;
-  ddq[1] = (-J21 * point.ddx + J11 * point.ddy) / det;
   return true;
 }
